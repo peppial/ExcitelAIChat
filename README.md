@@ -2,7 +2,10 @@
 
 This project is an AI chat application that demonstrates how to chat with custom data using an AI language model. Please note that this template is currently in an early preview stage. If you have feedback, please take a [brief survey](https://aka.ms/dotnet-chat-templatePreview2-survey).
 
+### How to start from scratch with the aichatweb template:
 
+dotnet new install Microsoft.Extensions.AI.Templates
+dotnet new aichatweb
 
 ### Required Environment Variables
 
