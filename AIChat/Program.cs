@@ -58,10 +58,6 @@ app.MapRazorComponents<App>()
 app.UseSession();
 app.UseMiddleware<SimpleAuthMiddleware>();
 
-await DataIngestor.IngestDataAsync(
-    app.Services,
-    new PDFDirectorySource(Path.Combine(builder.Environment.WebRootPath, "Data")));
-
 var pdfSource = new PDFDirectorySource(Path.Combine(app.Environment.ContentRootPath, "wwwroot/Data"));
 var docxSource = new DocxDirectorySource(Path.Combine(app.Environment.ContentRootPath, "wwwroot/Data"));
 
