@@ -4,8 +4,10 @@ This project is an AI chat application that demonstrates how to chat with custom
 
 ### How to start from scratch with the aichatweb template:
 
+```
 dotnet new install Microsoft.Extensions.AI.Templates
 dotnet new aichatweb
+```
 
 ### Required Environment Variables
 
