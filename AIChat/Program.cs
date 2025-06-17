@@ -18,7 +18,7 @@ var embeddingGenerator = azureClient.GetEmbeddingClient("text-embedding-3-small"
 
 var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT");
 var azureSearchKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY");
-var azureSearchIndex = "aichat-index";
+var azureSearchIndex = "prd";
 
 if (string.IsNullOrEmpty(azureSearchEndpoint) || string.IsNullOrEmpty(azureSearchKey))
 {

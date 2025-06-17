@@ -46,7 +46,7 @@ public class DataIngestor
 
                     try
                     {
-                        await Task.Delay(1000);
+                        await Task.Delay(100);
                         // Generate embedding for the chunk text
                         var embeddingResult = await _embeddingGenerator.GenerateAsync(chunk.Text);
                         var vector = embeddingResult.Vector.ToArray();
