@@ -30,7 +30,22 @@ builder.Services.AddSingleton<AzureSearchVectorStore>();
 
 builder.Services.AddScoped<DataIngestor>();
 builder.Services.AddSingleton<SemanticSearch>();
-builder.Services.AddChatClient(chatClient).UseFunctionInvocation().UseLogging();
+
+// Configure HTTP client for Jira MCP
+builder.Services.AddHttpClient<JiraMcpClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Register Jira services
+builder.Services.AddScoped<JiraMcpClient>();
+builder.Services.AddScoped<JiraAIFunctions>();
+
+// Configure AI chat client with function calling
+builder.Services.AddChatClient(chatClient)
+    .UseFunctionInvocation()
+    .UseLogging();
+
 builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(embeddingGenerator);
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>

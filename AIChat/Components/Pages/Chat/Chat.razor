@@ -3,6 +3,7 @@
 @inject IChatClient ChatClient
 @inject NavigationManager Nav
 @inject SemanticSearch Search
+@inject JiraAIFunctions JiraFunctions
 @implements IDisposable
 
 <PageTitle>Chat</PageTitle>
@@ -11,7 +12,7 @@
 
 <ChatMessageList Messages="@messages" InProgressMessage="@currentResponseMessage">
     <NoMessagesContent>
-        <div>To get started, try asking about Excitel software systems and features. I will try to answer and provide the links to Google Drive where the PRDs are located.</div>
+        <div>To get started, try asking about Excitel software systems and features. I will try to answer and provide the links to Google Drive where the PRDs are located. Also you can ask about Jira issues.</div>
     </NoMessagesContent>
 </ChatMessageList>
 
@@ -21,21 +22,23 @@
     <SurveyPrompt /> @* Remove this line to eliminate the template survey message *@
 </div>
 
-@code {
-    private const string SystemPrompt = @"
-        You are an assistant who answers questions about information you retrieve.
-        Do not answer questions about anything else.
+@code {    private const string SystemPrompt = @"
+        You are an assistant who helps with both document search and Jira issue management.
         Use only simple markdown to format your responses.
 
-        Use the search tool to find relevant information. When you do this, end your
-        reply with citations in the special XML format:
+        For document search:
+        - Use the search tool to find relevant information about Excitel software systems
+        - When you do this, end your reply with citations in the special XML format:
+          <citation filename='string' page_number='number'>exact quote here</citation>
+        - The quote must be max 5 words, taken word-for-word from the search result
 
-        <citation filename='string' page_number='number'>exact quote here</citation>
+        For Jira management:
+        - Help users search, create, update, and manage Jira issues
+        - Use appropriate JQL queries for searching
+        - Provide clear status updates when performing actions
+        - Format issue information clearly with key details
 
-        Always include the citation in your response if there are results.
-
-        The quote must be max 5 words, taken word-for-word from the search result, and is the basis for why the citation is relevant.
-        Don't refer to the presence of citations; just emit these tags right at the end, with no surrounding text.
+        Always be helpful and provide relevant information based on the user's request.
         ";
 
     private readonly ChatOptions chatOptions = new();
@@ -43,12 +46,20 @@
     private CancellationTokenSource? currentResponseCancellation;
     private ChatMessage? currentResponseMessage;
     private ChatInput? chatInput;
-    private ChatSuggestions? chatSuggestions;
-
-    protected override void OnInitialized()
+    private ChatSuggestions? chatSuggestions;    protected override void OnInitialized()
     {
-        messages.Add(new(ChatRole.System, SystemPrompt));
-        chatOptions.Tools = [AIFunctionFactory.Create(SearchAsync)];
+        messages.Add(new(ChatRole.System, SystemPrompt));        // Configure chat tools - document search and Jira functions
+        chatOptions.Tools = [
+            // Document search
+            AIFunctionFactory.Create(SearchAsync),
+
+            // Jira functions
+            AIFunctionFactory.Create(JiraFunctions.SearchJiraIssues),
+            AIFunctionFactory.Create(JiraFunctions.GetJiraIssue),
+            AIFunctionFactory.Create(JiraFunctions.GetRecentJiraIssues),
+            AIFunctionFactory.Create(JiraFunctions.GetJiraIssuesByProject),
+
+        ];
     }
 
     private async Task AddUserMessageAsync(ChatMessage userMessage)
