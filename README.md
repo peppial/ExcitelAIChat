@@ -40,7 +40,6 @@ dotnet new aichatweb
 From the command line, configure your secrets for this project by running the following commands:
 
 ```sh
-cd /Users/penkaaleksandrova/Projects/AIChat/AIChat
 dotnet user-secrets set "AzureOpenAI:Endpoint" "https://your-resource.openai.azure.com/"
 dotnet user-secrets set "AzureOpenAI:ApiKey" "your-azure-openai-api-key-here"
 dotnet user-secrets set "AzureSearch:Endpoint" "https://your-search-service.search.windows.net"

@@ -3,6 +3,18 @@ import * as marked from './lib/marked/dist/marked.esm.js';
 
 const purify = DOMPurify(window);
 
+var renderer = new marked.Renderer();
+renderer.link = function (token) {
+    let out = `<a href="${token.href}" target="_blank"`;
+    if (token.title) out += ` title="${token.title}"`;
+    out += `>${token.text}</a>`;
+    return out;
+};
+
+marked.setOptions({
+    renderer: renderer
+});
+
 customElements.define('assistant-message', class extends HTMLElement {
     static observedAttributes = ['markdown'];
 
@@ -10,7 +22,10 @@ customElements.define('assistant-message', class extends HTMLElement {
         if (name === 'markdown') {
             newValue = newValue.replace(/<citation.*?<\/citation>/gs, '');
             const elements = marked.parse(newValue.replace(/</g, '&lt;'));
-            this.innerHTML = purify.sanitize(elements, { KEEP_CONTENT: false });
+            this.innerHTML = purify.sanitize(elements, {
+                KEEP_CONTENT: false,
+                ADD_ATTR: ['target'] // Allow target attribute
+            });
 
             // Within text nodes, unescape the &lt; entities otherwise it will be displayed
             // to the user as escaped if the element uses preformatted styling. This is safe

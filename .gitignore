@@ -262,3 +262,7 @@ paket-files/
 __pycache__/
 *.pyc
 Tests/coverage.json
+
+# Environment variables
+.env
+.env.local
