@@ -1,6 +1,8 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace AIChat.Services;
 
@@ -38,14 +40,22 @@ public class JiraMcpClient : IDisposable
                 },
                 cancellationToken: CancellationToken.None);
 
-            var textContent = result.Content.FirstOrDefault(c => c.Type == "text");
+            var block = result.Content.FirstOrDefault(c => c.Type == "text");
+            TextContentBlock textContent = null;
+            if (block is TextContentBlock)
+            {
+                textContent = (TextContentBlock)block;
+            }
+            else
+            {
+                _logger.LogWarning("Expected text content block but received: {Type}", textContent?.Type);
+            }
             if (textContent?.Text == null)
             {
                 _logger.LogWarning("No text content returned from Jira search");
                 return Array.Empty<JiraIssue>();
             }
 
-            // Log the raw JSON response for debugging
             _logger.LogInformation("Raw Jira search response: {RawResponse}", textContent.Text);
 
             try
@@ -90,7 +100,12 @@ public class JiraMcpClient : IDisposable
                 },
                 cancellationToken: CancellationToken.None);
 
-            var textContent = result.Content.FirstOrDefault(c => c.Type == "text");
+            var block = result.Content.FirstOrDefault(c => c.Type == "text");
+            TextContentBlock textContent = null;
+            if (block is TextContentBlock)
+            {
+                textContent = (TextContentBlock)block;
+            }
             if (textContent?.Text == null)
             {
                 _logger.LogWarning("No text content returned from Jira get issue");
@@ -118,49 +133,6 @@ public class JiraMcpClient : IDisposable
         }
     }
 
-    public async Task<bool> IsHealthyAsync()
-    {
-        try
-        {
-            var client = await EnsureInitializedAsync();
-            if (client == null)
-            {
-                return false;
-            }
-
-            // Try to list tools to check if the connection is working
-            var tools = await client.ListToolsAsync();
-            return tools.Any();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "MCP client health check failed");
-            return false;
-        }
-    }
-
-    public async Task<string[]> GetAvailableToolsAsync()
-    {
-        try
-        {
-            var client = await EnsureInitializedAsync();
-            if (client == null)
-            {
-                _logger.LogError("Failed to initialize MCP client");
-                return Array.Empty<string>();
-            }
-
-            var tools = await client.ListToolsAsync();
-            return tools.Select(t => t.Name).ToArray();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting available tools");
-            return Array.Empty<string>();
-        }
-    }
-
-
     private async Task<IMcpClient?> EnsureInitializedAsync()
     {
         if (_isInitialized && _mcpClient != null)
@@ -172,19 +144,28 @@ public class JiraMcpClient : IDisposable
             if (_isInitialized && _mcpClient != null)
                 return _mcpClient;
 
-            var clientTransport = new StdioClientTransport(new StdioClientTransportOptions
+            return await InitializeAsync();
+        }
+        finally
+        {
+            _initSemaphore.Release();
+        }
+    }
+    private async Task<IMcpClient?> InitializeAsync()
+    {
+        Exception? lastException = null;
+
+        try
+        {
+
+            var sseEndpoint = "http://localhost/sse";
+
+            //await SendJsonRpcWithLogging(sseEndpoint);
+
+            var clientTransport = new SseClientTransport(new SseClientTransportOptions
             {
-                Name = "Jira MCP Server",
-                Command = "docker",
-                Arguments = [
-                    "run",
-                    "-i",
-                    "--rm",
-                    "--env-file",
-                    "mcp-atlassian.env",
-                    "ghcr.io/sooperset/mcp-atlassian:latest",
-                    "-vv"
-                ]
+                Name = "jira",
+                Endpoint = new Uri(sseEndpoint)
             });
 
             _mcpClient = await McpClientFactory.CreateAsync(clientTransport);
@@ -192,26 +173,35 @@ public class JiraMcpClient : IDisposable
 
             _logger.LogInformation("MCP client initialized successfully");
 
-            // Log available tools for debugging
-            var tools = await _mcpClient.ListToolsAsync();
-            _logger.LogInformation("Available MCP tools count: {Count}", tools.Count());
-            foreach (var tool in tools.Take(5)) // Only log first 5 tools to avoid spam
-            {
-                _logger.LogDebug("Available tool: {Name}", tool.Name);
-            }
 
             return _mcpClient;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error initializing MCP client");
-            return null;
+            lastException = ex;
+            _logger.LogWarning(ex, "MCP client initialization failed");
+
+            if (_mcpClient is IDisposable disposableClient)
+            {
+                try
+                {
+                    disposableClient.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    _logger.LogWarning(disposeEx, "Failed to dispose failed MCP client");
+                }
+            }
+            _mcpClient = null;
+            _isInitialized = false;
+
+
         }
-        finally
-        {
-            _initSemaphore.Release();
-        }
+
+        _logger.LogError(lastException, "Failed to initialize MCP client");
+        return null;
     }
+
 
     public void Dispose()
     {

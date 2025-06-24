@@ -7,11 +7,24 @@ public class JiraAIFunctions
 {
     private readonly JiraMcpClient _jiraMcpClient;
     private readonly ILogger<JiraAIFunctions> _logger;
+    private readonly IConfiguration _configuration;
 
-    public JiraAIFunctions(JiraMcpClient jiraMcpClient, ILogger<JiraAIFunctions> logger)
+    public JiraAIFunctions(JiraMcpClient jiraMcpClient, ILogger<JiraAIFunctions> logger, IConfiguration configuration)
     {
         _jiraMcpClient = jiraMcpClient;
         _logger = logger;
+        _configuration = configuration;
+    }
+
+    private string GetJiraUrl()
+    {
+        return Environment.GetEnvironmentVariable("JIRA_URL");
+    }
+
+    private string GetJiraIssueUrl(string issueKey)
+    {
+        var baseUrl = GetJiraUrl().TrimEnd('/');
+        return $"{baseUrl}/browse/{issueKey}";
     }
 
     [Description("Search for Jira issues using JQL (Jira Query Language)")]
@@ -36,7 +49,7 @@ public class JiraAIFunctions
 
             foreach (var issue in issues)
             {
-                result += $"**{issue.Key}** - {issue.Summary}\n";
+                result += $"**[{issue.Key}]({GetJiraIssueUrl(issue.Key)}** - {issue.Summary}\n";
                 result += $"Status: {issue.Status?.Name ?? "Unknown"}\n";
                 result += $"Type: {issue.IssueType?.Name ?? "Unknown"}\n";
                 result += $"Priority: {issue.Priority?.Name ?? "Unknown"}\n";
@@ -79,14 +92,14 @@ public class JiraAIFunctions
                 return $"Issue {issueKey} not found.";
             }
 
-            var result = $"**{issue.Key}** - {issue.Summary}\n\n";
+            var result = $"**[{issue.Key}]({GetJiraIssueUrl(issue.Key)}** - {issue.Summary}\n\n";
             result += $"**Status:** {issue.Status?.Name ?? "Unknown"}\n";
             result += $"**Type:** {issue.IssueType?.Name ?? "Unknown"}\n";
             result += $"**Priority:** {issue.Priority?.Name ?? "Unknown"}\n";
             result += $"**Assignee:** {issue.Assignee?.DisplayName ?? "Unassigned"}\n";
             result += $"**Reporter:** {issue.Reporter?.DisplayName ?? "Unknown"}\n";
             result += $"**Created:** {issue.Created}\n";
-            result += $"**Updated:** {issue.Updated}\n\n";
+            result += $"**Updated:** {issue.Updated}\n";
 
             if (!string.IsNullOrEmpty(issue.Description))
             {
