@@ -158,9 +158,7 @@ public class JiraMcpClient : IDisposable
         try
         {
 
-            var sseEndpoint = "http://localhost/sse";
-
-            //await SendJsonRpcWithLogging(sseEndpoint);
+            var sseEndpoint = Environment.GetEnvironmentVariable("JIRA_MCP_ENDPOINT");
 
             var clientTransport = new SseClientTransport(new SseClientTransportOptions
             {
