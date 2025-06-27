@@ -18,7 +18,7 @@ This project is an AI chat application using RAG and an MCP Server based on aich
 
 #### Authentication Configuration
 - **LOGIN_USERNAME**: Username for basic authentication (if authentication is enabled)
-  - Example: `admin`
+  - Example: `your-username`
 - **LOGIN_PASSWORD**: Password for basic authentication (if authentication is enabled)
   - Example: `your-secure-password`
 
