@@ -1,13 +1,6 @@
 # AI Chat with Custom Data
 
-This project is an AI chat application using RAG and an MCP Server.
-
-### How to start from scratch with the aichatweb template:
-
-```
-dotnet new install Microsoft.Extensions.AI.Templates
-dotnet new aichatweb
-```
+This project is an AI chat application using RAG and an MCP Server based on aichatweb.
 
 ### Required Environment Variables
 
@@ -52,3 +45,11 @@ The application automatically ingests documents from the `wwwroot/Data` director
 - **Word documents** (.docx)
 
 Place your documents in the `wwwroot/Data` folder and restart the application to ingest them.
+
+
+### How to start from scratch with the aichatweb template:
+
+```
+dotnet new install Microsoft.Extensions.AI.Templates
+dotnet new aichatweb
+```
