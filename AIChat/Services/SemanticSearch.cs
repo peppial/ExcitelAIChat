@@ -18,7 +18,8 @@ public class SemanticSearch
         var embeddingResult = await _embeddingGenerator.GenerateAsync(text);
         var vector = embeddingResult.Vector.ToArray();
         var searchResults = await _vectorStore.VectorSearchAsync<Dictionary<string, object>>(vector, maxResults);
-        var chunks = new List<IngestedChunk>(); await foreach (var result in searchResults.GetResultsAsync())
+        var chunks = new List<IngestedChunk>(); 
+        await foreach (var result in searchResults.GetResultsAsync())
         {
             if (result.Document.TryGetValue("payloadJson", out var payloadObj))
             {
