@@ -7,13 +7,11 @@ public class JiraAIFunctions
 {
     private readonly JiraMcpClient _jiraMcpClient;
     private readonly ILogger<JiraAIFunctions> _logger;
-    private readonly IConfiguration _configuration;
 
-    public JiraAIFunctions(JiraMcpClient jiraMcpClient, ILogger<JiraAIFunctions> logger, IConfiguration configuration)
+    public JiraAIFunctions(JiraMcpClient jiraMcpClient, ILogger<JiraAIFunctions> logger)
     {
         _jiraMcpClient = jiraMcpClient;
         _logger = logger;
-        _configuration = configuration;
     }
 
     private string GetJiraUrl()

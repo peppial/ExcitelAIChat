@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModelContextProtocol.Client;
@@ -9,15 +8,13 @@ namespace AIChat.Services;
 public class JiraMcpClient : IDisposable
 {
     private readonly ILogger<JiraMcpClient> _logger;
-    private readonly IConfiguration _configuration;
     private IMcpClient? _mcpClient;
     private bool _isInitialized = false;
     private readonly SemaphoreSlim _initSemaphore = new(1, 1);
     private bool _disposed = false;
-    public JiraMcpClient(ILogger<JiraMcpClient> logger, IConfiguration configuration)
+    public JiraMcpClient(ILogger<JiraMcpClient> logger)
     {
         _logger = logger;
-        _configuration = configuration;
     }
 
     public async Task<JiraIssue[]> SearchJiraIssuesAsync(string jql, int maxResults = 20)
@@ -215,7 +212,6 @@ public class JiraMcpClient : IDisposable
     }
 }
 
-// MCP Protocol Models
 public class McpRequest
 {
     [JsonPropertyName("jsonrpc")]

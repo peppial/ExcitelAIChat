@@ -27,7 +27,6 @@ public class DataIngestor
     }
     public async Task IngestDataAsync(IIngestionSource source)
     {
-        // Get documents that need to be processed
         var modifiedDocuments = await source.GetNewOrModifiedDocumentsAsync(new List<IngestedDocument>());
 
         int count = 0;
@@ -37,7 +36,6 @@ public class DataIngestor
 
             try
             {
-                // Create chunks for the document
                 var chunks = await source.CreateChunksForDocumentAsync(doc);
 
                 foreach (var chunk in chunks)
@@ -47,14 +45,11 @@ public class DataIngestor
                     try
                     {
                         await Task.Delay(100);
-                        // Generate embedding for the chunk text
                         var embeddingResult = await _embeddingGenerator.GenerateAsync(chunk.Text);
                         var vector = embeddingResult.Vector.ToArray();
 
-                        // Serialize the chunk as payload
                         var payloadJson = System.Text.Json.JsonSerializer.Serialize(chunk);
 
-                        // Upload to vector store using chunk key as ID
                         await _vectorStore.UploadDocumentAsync(chunk.Key, vector, payloadJson);
 
                         _logger.LogDebug("Successfully uploaded chunk {chunkId}", chunk.Key);
@@ -63,14 +58,12 @@ public class DataIngestor
                     {
                         _logger.LogError(ex, "Failed to process chunk {chunkId} from document {documentId}",
                             chunk.Key, doc.DocumentId);
-                        // Continue with next chunk instead of failing entire ingestion
                     }
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to process document {documentId}", doc.DocumentId);
-                // Continue with next document instead of failing entire ingestion
             }
         }
 

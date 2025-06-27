@@ -9,6 +9,9 @@ public class SimpleAuthMiddleware
     public SimpleAuthMiddleware(RequestDelegate next, IConfiguration configuration)
     {
         _next = next;
+        ArgumentException.ThrowIfNullOrEmpty(Environment.GetEnvironmentVariable("LOGIN_USERNAME"));
+        ArgumentException.ThrowIfNullOrEmpty(Environment.GetEnvironmentVariable("LOGIN_PASSWORD"));
+
         _username = Environment.GetEnvironmentVariable("LOGIN_USERNAME");
         _password = Environment.GetEnvironmentVariable("LOGIN_PASSWORD");
     }

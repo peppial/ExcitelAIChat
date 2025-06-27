@@ -24,6 +24,7 @@ if (string.IsNullOrEmpty(azureSearchEndpoint) || string.IsNullOrEmpty(azureSearc
 {
     throw new InvalidOperationException("Missing Azure Search endpoint or API key. Set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY in environment variables.");
 }
+
 var searchClient = new SearchClient(new Uri(azureSearchEndpoint), azureSearchIndex, new AzureKeyCredential(azureSearchKey));
 builder.Services.AddSingleton(searchClient);
 builder.Services.AddSingleton<AzureSearchVectorStore>();
@@ -31,17 +32,14 @@ builder.Services.AddSingleton<AzureSearchVectorStore>();
 builder.Services.AddScoped<DataIngestor>();
 builder.Services.AddSingleton<SemanticSearch>();
 
-// Configure HTTP client for Jira MCP
 builder.Services.AddHttpClient<JiraMcpClient>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// Register Jira services
 builder.Services.AddScoped<JiraMcpClient>();
 builder.Services.AddScoped<JiraAIFunctions>();
 
-// Configure AI chat client with function calling
 builder.Services.AddChatClient(chatClient)
     .UseFunctionInvocation()
     .UseLogging();
@@ -79,6 +77,7 @@ var docxSource = new DocxDirectorySource(Path.Combine(app.Environment.ContentRoo
 using (var scope = app.Services.CreateScope())
 {
     var dataIngestor = scope.ServiceProvider.GetRequiredService<DataIngestor>();
+
     // Uncomment the following lines to ingest data from PDF and DOCX files
 
     // Ingest PDF files
