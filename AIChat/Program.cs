@@ -18,19 +18,16 @@ var embeddingGenerator = azureClient.GetEmbeddingClient("text-embedding-3-small"
 
 var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT");
 var azureSearchKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY");
-var azureSearchIndex = "prd";
 
-if (string.IsNullOrEmpty(azureSearchEndpoint) || string.IsNullOrEmpty(azureSearchKey))
-{
-    throw new InvalidOperationException("Missing Azure Search endpoint or API key. Set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY in environment variables.");
-}
+var azureAISearchCredential = new AzureKeyCredential(azureSearchKey);
+builder.Services.AddAzureAISearchCollection<IngestedChunk>("data-test-chunks", new Uri(azureSearchEndpoint), azureAISearchCredential);
+builder.Services.AddAzureAISearchCollection<IngestedDocument>("data-test-documents", new Uri(azureSearchEndpoint), azureAISearchCredential);
 
-var searchClient = new SearchClient(new Uri(azureSearchEndpoint), azureSearchIndex, new AzureKeyCredential(azureSearchKey));
-builder.Services.AddSingleton(searchClient);
-builder.Services.AddSingleton<AzureSearchVectorStore>();
 
 builder.Services.AddScoped<DataIngestor>();
 builder.Services.AddSingleton<SemanticSearch>();
+builder.Services.AddChatClient(chatClient).UseFunctionInvocation().UseLogging();
+builder.Services.AddEmbeddingGenerator(embeddingGenerator);
 
 builder.Services.AddHttpClient<JiraMcpClient>(client =>
 {
@@ -40,11 +37,7 @@ builder.Services.AddHttpClient<JiraMcpClient>(client =>
 builder.Services.AddScoped<JiraMcpClient>();
 builder.Services.AddScoped<JiraAIFunctions>();
 
-builder.Services.AddChatClient(chatClient)
-    .UseFunctionInvocation()
-    .UseLogging();
 
-builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(embeddingGenerator);
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {

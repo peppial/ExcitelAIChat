@@ -1,72 +1,58 @@
 ﻿using Microsoft.Extensions.AI;
-using Azure.Search.Documents;
+using Microsoft.Extensions.VectorData;
 
 namespace AIChat.Services.Ingestion;
 
-public class DataIngestor
+public class DataIngestor(
+    ILogger<DataIngestor> logger,
+    VectorStoreCollection<string, IngestedChunk> chunksCollection,
+    VectorStoreCollection<string, IngestedDocument> documentsCollection)
 {
-    private readonly ILogger<DataIngestor> _logger;
-    private readonly AzureSearchVectorStore _vectorStore;
-    private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
-
-    public DataIngestor(
-        ILogger<DataIngestor> logger,
-        AzureSearchVectorStore vectorStore,
-        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
-    {
-        _logger = logger;
-        _vectorStore = vectorStore;
-        _embeddingGenerator = embeddingGenerator;
-    }
-
     public static async Task IngestDataAsync(IServiceProvider services, IIngestionSource source)
     {
         using var scope = services.CreateScope();
         var ingestor = scope.ServiceProvider.GetRequiredService<DataIngestor>();
         await ingestor.IngestDataAsync(source);
     }
+
     public async Task IngestDataAsync(IIngestionSource source)
     {
-        var modifiedDocuments = await source.GetNewOrModifiedDocumentsAsync(new List<IngestedDocument>());
+        await chunksCollection.EnsureCollectionExistsAsync();
+        await documentsCollection.EnsureCollectionExistsAsync();
 
-        int count = 0;
-        foreach (var doc in modifiedDocuments)
+        var sourceId = source.SourceId;
+        var documentsForSource = await documentsCollection.GetAsync(doc => doc.SourceId == sourceId, top: int.MaxValue).ToListAsync();
+
+        var deletedDocuments = await source.GetDeletedDocumentsAsync(documentsForSource);
+        foreach (var deletedDocument in deletedDocuments)
         {
-            _logger.LogInformation("Processing document number  {count} - {documentId}", ++count, doc.DocumentId);
-
-            try
-            {
-                var chunks = await source.CreateChunksForDocumentAsync(doc);
-
-                foreach (var chunk in chunks)
-                {
-                    _logger.LogInformation("Upserting chunk {chunkId} from document {documentId}", chunk.Key, doc.DocumentId);
-
-                    try
-                    {
-                        await Task.Delay(100);
-                        var embeddingResult = await _embeddingGenerator.GenerateAsync(chunk.Text);
-                        var vector = embeddingResult.Vector.ToArray();
-
-                        var payloadJson = System.Text.Json.JsonSerializer.Serialize(chunk);
-
-                        await _vectorStore.UploadDocumentAsync(chunk.Key, vector, payloadJson);
-
-                        _logger.LogDebug("Successfully uploaded chunk {chunkId}", chunk.Key);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to process chunk {chunkId} from document {documentId}",
-                            chunk.Key, doc.DocumentId);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process document {documentId}", doc.DocumentId);
-            }
+            logger.LogInformation("Removing ingested data for {documentId}", deletedDocument.DocumentId);
+            await DeleteChunksForDocumentAsync(deletedDocument);
+            await documentsCollection.DeleteAsync(deletedDocument.Key);
         }
 
-        _logger.LogInformation("Ingestion is up-to-date");
+        var modifiedDocuments = await source.GetNewOrModifiedDocumentsAsync(documentsForSource);
+        foreach (var modifiedDocument in modifiedDocuments)
+        {
+            logger.LogInformation("Processing {documentId}", modifiedDocument.DocumentId);
+            await DeleteChunksForDocumentAsync(modifiedDocument);
+
+            await documentsCollection.UpsertAsync(modifiedDocument);
+
+            var newRecords = await source.CreateChunksForDocumentAsync(modifiedDocument);
+            await chunksCollection.UpsertAsync(newRecords);
+        }
+
+        logger.LogInformation("Ingestion is up-to-date");
+
+        async Task DeleteChunksForDocumentAsync(IngestedDocument document)
+        {
+            var documentId = document.DocumentId;
+            var chunksToDelete = await chunksCollection.GetAsync(record => record.DocumentId == documentId, int.MaxValue).ToListAsync();
+            if (chunksToDelete.Any())
+            {
+                await chunksCollection.DeleteAsync(chunksToDelete.Select(r => r.Key));
+            }
+        }
     }
 }

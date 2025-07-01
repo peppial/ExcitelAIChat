@@ -2,10 +2,11 @@
 
 namespace AIChat.Services;
 
+
 public class IngestedDocument
 {
     private const int VectorDimensions = 2;
-    private const string VectorDistanceFunction = DistanceFunction.CosineDistance;
+    private const string VectorDistanceFunction = DistanceFunction.CosineSimilarity;
 
     [VectorStoreKey]
     public required string Key { get; set; }

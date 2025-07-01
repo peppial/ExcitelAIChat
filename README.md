@@ -36,7 +36,7 @@ This project is an AI chat application using RAG and an MCP Server based on aich
 1. Create an Azure AI Search service in the Azure portal
 2. Choose an appropriate pricing tier (Basic or higher recommended)
 3. Copy the endpoint and admin key from the resource
-4. Create an index with a vector index https://learn.microsoft.com/en-us/azure/search/vector-search-how-to-create-index
+4. The indexes are created automatically if they do not exist
 
 ### Data Ingestion
 
