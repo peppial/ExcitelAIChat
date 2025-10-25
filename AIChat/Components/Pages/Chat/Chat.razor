@@ -1,6 +1,8 @@
 ﻿@page "/"
 @using System.ComponentModel
-@inject IChatClient ChatClient
+@using Microsoft.Agents.AI
+
+@inject IServiceProvider ServiceProvider
 @inject NavigationManager Nav
 @inject SemanticSearch Search
 @inject JiraAIFunctions JiraFunctions
@@ -46,8 +48,15 @@
     private CancellationTokenSource? currentResponseCancellation;
     private ChatMessage? currentResponseMessage;
     private ChatInput? chatInput;
-    private ChatSuggestions? chatSuggestions;    protected override void OnInitialized()
+    private AIAgent aiAgent = default!;
+    private int statefulMessageCount;
+    private ChatSuggestions? chatSuggestions;
+
+    protected override void OnInitialized()
     {
+        aiAgent = ServiceProvider.GetRequiredKeyedService<AIAgent>("ChatAgent");
+        statefulMessageCount = 0;
+
         messages.Add(new(ChatRole.System, SystemPrompt));        // Configure chat tools - document search and Jira functions
         chatOptions.Tools = [
             // Document search
@@ -75,16 +84,28 @@
         var responseText = new TextContent("");
         currentResponseMessage = new ChatMessage(ChatRole.Assistant, [responseText]);
         currentResponseCancellation = new();
-        await foreach (var update in ChatClient.GetStreamingResponseAsync([.. messages], chatOptions, currentResponseCancellation.Token))
+        /* await foreach (var update in ChatClient.GetStreamingResponseAsync([.. messages], chatOptions, currentResponseCancellation.Token))
         {
             messages.AddMessages(update, filter: c => c is not TextContent);
             responseText.Text += update.Text;
             ChatMessageItem.NotifyChanged(currentResponseMessage);
+        } */
+
+        await foreach (var update in aiAgent.RunStreamingAsync(
+                messages: messages.Skip(statefulMessageCount),
+                cancellationToken: currentResponseCancellation.Token))
+        {
+                var responseUpdate = update.AsChatResponseUpdate();
+                messages.AddMessages(responseUpdate, filter: c => c is not TextContent);
+                responseText.Text += update.Text;
+                chatOptions.ConversationId = responseUpdate.ConversationId;
+                ChatMessageItem.NotifyChanged(currentResponseMessage);
         }
 
         // Store the final response in the conversation, and begin getting suggestions
         messages.Add(currentResponseMessage!);
         currentResponseMessage = null;
+        statefulMessageCount = chatOptions.ConversationId is not null ? messages.Count : 0;
         chatSuggestions?.Update(messages);
     }
 
@@ -106,6 +127,7 @@
         messages.Clear();
         messages.Add(new(ChatRole.System, SystemPrompt));
         chatSuggestions?.Clear();
+        statefulMessageCount = 0;
         await chatInput!.FocusAsync();
     }
 

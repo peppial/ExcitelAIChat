@@ -6,6 +6,8 @@ using AIChat.Services.Ingestion;
 using Azure.Search.Documents;
 using Azure;
 using Azure.AI.OpenAI;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.Agents.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -28,6 +30,32 @@ builder.Services.AddScoped<DataIngestor>();
 builder.Services.AddSingleton<SemanticSearch>();
 builder.Services.AddChatClient(chatClient).UseFunctionInvocation().UseLogging();
 builder.Services.AddEmbeddingGenerator(embeddingGenerator);
+
+// Register the AI Agent using the Agent Framework
+builder.AddAIAgent("ChatAgent", (sp, key) =>
+{
+    // Get required services
+    var logger = sp.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Configuring AI Agent with key '{Key}' for model '{Model}'", key, "gpt-4o-mini");
+
+    var searchFunctions = sp.GetRequiredService<SearchFunctions>();
+    var chatClient = sp.GetRequiredService<IChatClient>();
+
+    // Create and configure the AI agent
+    var aiAgent = chatClient.CreateAIAgent(
+        name: key,
+        instructions: "You are a useful agent that helps users.",
+        description: "An AI agent that helps users.",
+        tools: [AIFunctionFactory.Create(searchFunctions.SearchAsync)]
+        )
+    .AsBuilder()
+    .UseOpenTelemetry(configure: c =>
+        c.EnableSensitiveData = builder.Environment.IsDevelopment())
+    .Build();
+
+    return aiAgent;
+});
+builder.Services.AddSingleton<SearchFunctions>();
 
 builder.Services.AddHttpClient<JiraMcpClient>(client =>
 {
