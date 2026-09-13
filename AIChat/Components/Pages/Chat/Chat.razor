@@ -1,11 +1,8 @@
 ﻿@page "/"
-@using System.ComponentModel
 @using Microsoft.Agents.AI
 
 @inject IServiceProvider ServiceProvider
 @inject NavigationManager Nav
-@inject SemanticSearch Search
-@inject JiraAIFunctions JiraFunctions
 @implements IDisposable
 
 <PageTitle>Chat</PageTitle>
@@ -24,51 +21,19 @@
     <SurveyPrompt /> @* Remove this line to eliminate the template survey message *@
 </div>
 
-@code {    private const string SystemPrompt = @"
-        You are an assistant who helps with both document search and Jira issue management.
-        Use only simple markdown to format your responses.
-
-        For document search:
-        - Use the search tool to find relevant information about Excitel software systems
-        - When you do this, end your reply with citations in the special XML format:
-          <citation filename='string' page_number='number'>exact quote here</citation>
-        - The quote must be max 5 words, taken word-for-word from the search result
-
-        For Jira management:
-        - Help users search, create, update, and manage Jira issues
-        - Use appropriate JQL queries for searching
-        - Provide clear status updates when performing actions
-        - Format issue information clearly with key details
-
-        Always be helpful and provide relevant information based on the user's request.
-        ";
-
-    private readonly ChatOptions chatOptions = new();
+@code {
     private readonly List<ChatMessage> messages = new();
     private CancellationTokenSource? currentResponseCancellation;
     private ChatMessage? currentResponseMessage;
     private ChatInput? chatInput;
     private AIAgent aiAgent = default!;
-    private int statefulMessageCount;
+    private AgentSession session = default!;
     private ChatSuggestions? chatSuggestions;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         aiAgent = ServiceProvider.GetRequiredKeyedService<AIAgent>("ChatAgent");
-        statefulMessageCount = 0;
-
-        messages.Add(new(ChatRole.System, SystemPrompt));        // Configure chat tools - document search and Jira functions
-        chatOptions.Tools = [
-            // Document search
-            AIFunctionFactory.Create(SearchAsync),
-
-            // Jira functions
-            AIFunctionFactory.Create(JiraFunctions.SearchJiraIssues),
-            AIFunctionFactory.Create(JiraFunctions.GetJiraIssue),
-            AIFunctionFactory.Create(JiraFunctions.GetRecentJiraIssues),
-            AIFunctionFactory.Create(JiraFunctions.GetJiraIssuesByProject),
-
-        ];
+        session = await aiAgent.CreateSessionAsync();
     }
 
     private async Task AddUserMessageAsync(ChatMessage userMessage)
@@ -80,32 +45,23 @@
         chatSuggestions?.Clear();
         await chatInput!.FocusAsync();
 
-        // Stream and display a new response from the IChatClient
+        // Stream and display a new response from the agent; the session holds the conversation history
         var responseText = new TextContent("");
         currentResponseMessage = new ChatMessage(ChatRole.Assistant, [responseText]);
         currentResponseCancellation = new();
-        /* await foreach (var update in ChatClient.GetStreamingResponseAsync([.. messages], chatOptions, currentResponseCancellation.Token))
-        {
-            messages.AddMessages(update, filter: c => c is not TextContent);
-            responseText.Text += update.Text;
-            ChatMessageItem.NotifyChanged(currentResponseMessage);
-        } */
-
         await foreach (var update in aiAgent.RunStreamingAsync(
-                messages: messages.Skip(statefulMessageCount),
+                userMessage,
+                session,
                 cancellationToken: currentResponseCancellation.Token))
         {
-                var responseUpdate = update.AsChatResponseUpdate();
-                messages.AddMessages(responseUpdate, filter: c => c is not TextContent);
-                responseText.Text += update.Text;
-                chatOptions.ConversationId = responseUpdate.ConversationId;
-                ChatMessageItem.NotifyChanged(currentResponseMessage);
+            messages.AddMessages(update.AsChatResponseUpdate(), filter: c => c is not TextContent);
+            responseText.Text += update.Text;
+            ChatMessageItem.NotifyChanged(currentResponseMessage);
         }
 
         // Store the final response in the conversation, and begin getting suggestions
         messages.Add(currentResponseMessage!);
         currentResponseMessage = null;
-        statefulMessageCount = chatOptions.ConversationId is not null ? messages.Count : 0;
         chatSuggestions?.Update(messages);
     }
 
@@ -125,21 +81,9 @@
     {
         CancelAnyCurrentResponse();
         messages.Clear();
-        messages.Add(new(ChatRole.System, SystemPrompt));
+        session = await aiAgent.CreateSessionAsync();
         chatSuggestions?.Clear();
-        statefulMessageCount = 0;
         await chatInput!.FocusAsync();
-    }
-
-    [Description("Searches for information using a phrase or keyword")]
-    private async Task<IEnumerable<string>> SearchAsync(
-        [Description("The phrase to search for.")] string searchPhrase,
-        [Description("If possible, specify the filename to search that file only. If not provided or empty, the search includes all files.")] string? filenameFilter = null)
-    {
-        await InvokeAsync(StateHasChanged);
-        var results = await Search.SearchAsync(searchPhrase, filenameFilter, maxResults: 5);
-        return results.Select(result =>
-            $"<result filename=\"{result.DocumentId}\" page_number=\"{result.PageNumber}\">{result.Text}</result>");
     }
 
     public void Dispose()

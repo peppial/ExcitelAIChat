@@ -5,18 +5,22 @@ using AIChat.Services;
 using AIChat.Services.Ingestion;
 using Azure.Search.Documents;
 using Azure;
-using Azure.AI.OpenAI;
-using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI;
+using OpenAI;
+using System.ClientModel;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
-AzureOpenAIClient azureClient = new(
-    new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")),
-    new AzureKeyCredential(Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")));
-var chatClient = azureClient.GetChatClient("gpt-4o-mini").AsIChatClient();
-var embeddingGenerator = azureClient.GetEmbeddingClient("text-embedding-3-small").AsIEmbeddingGenerator();
+// Azure OpenAI v1 endpoint, used through the OpenAI SDK
+OpenAIClient openAIClient = new(
+    new ApiKeyCredential(Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")!),
+    new OpenAIClientOptions
+    {
+        Endpoint = new Uri($"{Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!.TrimEnd('/')}/openai/v1/")
+    });
+var chatClient = openAIClient.GetChatClient("gpt-4o-mini").AsIChatClient();
+var embeddingGenerator = openAIClient.GetEmbeddingClient("text-embedding-3-small").AsIEmbeddingGenerator();
 
 var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT");
 var azureSearchKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY");
@@ -31,39 +35,46 @@ builder.Services.AddSingleton<SemanticSearch>();
 builder.Services.AddChatClient(chatClient).UseFunctionInvocation().UseLogging();
 builder.Services.AddEmbeddingGenerator(embeddingGenerator);
 
-// Register the AI Agent using the Agent Framework
-builder.AddAIAgent("ChatAgent", (sp, key) =>
-{
-    // Get required services
-    var logger = sp.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("Configuring AI Agent with key '{Key}' for model '{Model}'", key, "gpt-4o-mini");
-
-    var searchFunctions = sp.GetRequiredService<SearchFunctions>();
-    var chatClient = sp.GetRequiredService<IChatClient>();
-
-    // Create and configure the AI agent
-    var aiAgent = chatClient.CreateAIAgent(
-        name: key,
-        instructions: "You are a useful agent that helps users.",
-        description: "An AI agent that helps users.",
-        tools: [AIFunctionFactory.Create(searchFunctions.SearchAsync)]
-        )
-    .AsBuilder()
-    .UseOpenTelemetry(configure: c =>
-        c.EnableSensitiveData = builder.Environment.IsDevelopment())
-    .Build();
-
-    return aiAgent;
-});
 builder.Services.AddSingleton<SearchFunctions>();
+builder.Services.AddSingleton<JiraMcpClient>();
+builder.Services.AddSingleton<JiraAIFunctions>();
 
-builder.Services.AddHttpClient<JiraMcpClient>(client =>
+// Register the chat agent as a harness agent. Long-running-task features (plan/execute modes,
+// todos, file memory, skills, web search) are disabled to keep plain Q&A chat behavior.
+builder.Services.AddKeyedSingleton<AIAgent>("ChatAgent", (sp, key) =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+    var searchFunctions = sp.GetRequiredService<SearchFunctions>();
+    var jiraFunctions = sp.GetRequiredService<JiraAIFunctions>();
 
-builder.Services.AddScoped<JiraMcpClient>();
-builder.Services.AddScoped<JiraAIFunctions>();
+    // The harness adds its own function invocation and OpenTelemetry, so it wraps the raw chat client
+    return chatClient.AsHarnessAgent(new HarnessAgentOptions
+    {
+        Name = (string)key!,
+        Description = "Answers questions about Excitel software systems and Jira issues.",
+        ChatOptions = new ChatOptions
+        {
+            Instructions = AgentPrompts.System,
+            Tools =
+            [
+                AIFunctionFactory.Create(searchFunctions.SearchAsync),
+                AIFunctionFactory.Create(jiraFunctions.SearchJiraIssues),
+                AIFunctionFactory.Create(jiraFunctions.GetJiraIssue),
+                AIFunctionFactory.Create(jiraFunctions.GetRecentJiraIssues),
+                AIFunctionFactory.Create(jiraFunctions.GetJiraIssuesByProject),
+            ],
+        },
+        // Token limits enable in-loop compaction; still marked evaluation-only in 1.21
+#pragma warning disable MAAI001
+        MaxContextWindowTokens = 128_000,
+        MaxOutputTokens = 16_384,
+#pragma warning restore MAAI001
+        DisableAgentModeProvider = true,
+        DisableTodoProvider = true,
+        DisableFileMemory = true,
+        DisableAgentSkillsProvider = true,
+        DisableWebSearch = true,
+    });
+});
 
 
 builder.Services.AddDistributedMemoryCache();
