@@ -5,10 +5,10 @@ using ModelContextProtocol.Protocol;
 
 namespace AIChat.Services;
 
-public class JiraMcpClient : IDisposable
+public class JiraMcpClient : IAsyncDisposable
 {
     private readonly ILogger<JiraMcpClient> _logger;
-    private IMcpClient? _mcpClient;
+    private McpClient? _mcpClient;
     private bool _isInitialized = false;
     private readonly SemaphoreSlim _initSemaphore = new(1, 1);
     private bool _disposed = false;
@@ -130,7 +130,7 @@ public class JiraMcpClient : IDisposable
         }
     }
 
-    private async Task<IMcpClient?> EnsureInitializedAsync()
+    private async Task<McpClient?> EnsureInitializedAsync()
     {
         if (_isInitialized && _mcpClient != null)
             return _mcpClient;
@@ -148,7 +148,7 @@ public class JiraMcpClient : IDisposable
             _initSemaphore.Release();
         }
     }
-    private async Task<IMcpClient?> InitializeAsync()
+    private async Task<McpClient?> InitializeAsync()
     {
         Exception? lastException = null;
 
@@ -157,13 +157,14 @@ public class JiraMcpClient : IDisposable
 
             var sseEndpoint = Environment.GetEnvironmentVariable("JIRA_MCP_ENDPOINT");
 
-            var clientTransport = new SseClientTransport(new SseClientTransportOptions
+            var clientTransport = new HttpClientTransport(new HttpClientTransportOptions
             {
                 Name = "jira",
-                Endpoint = new Uri(sseEndpoint)
+                Endpoint = new Uri(sseEndpoint),
+                TransportMode = HttpTransportMode.Sse
             });
 
-            _mcpClient = await McpClientFactory.CreateAsync(clientTransport);
+            _mcpClient = await McpClient.CreateAsync(clientTransport);
             _isInitialized = true;
 
             _logger.LogInformation("MCP client initialized successfully");
@@ -176,11 +177,11 @@ public class JiraMcpClient : IDisposable
             lastException = ex;
             _logger.LogWarning(ex, "MCP client initialization failed");
 
-            if (_mcpClient is IDisposable disposableClient)
+            if (_mcpClient is not null)
             {
                 try
                 {
-                    disposableClient.Dispose();
+                    await _mcpClient.DisposeAsync();
                 }
                 catch (Exception disposeEx)
                 {
@@ -198,13 +199,13 @@ public class JiraMcpClient : IDisposable
     }
 
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (!_disposed)
         {
-            if (_mcpClient is IDisposable disposableClient)
+            if (_mcpClient is not null)
             {
-                disposableClient.Dispose();
+                await _mcpClient.DisposeAsync();
             }
             _initSemaphore.Dispose();
             _disposed = true;
